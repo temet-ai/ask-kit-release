@@ -1,0 +1,61 @@
+{
+  "about": "Kinds of question agents answer by hand around releases: is the version the same everywhere it is written, is there a changelog entry for it, does anything in the tree look like a secret. Each is put to bench/fixture/ankh-cli, a small package whose manifests disagree on the version and whose seed script holds a database URL with a password. Paths are relative, so run the bench from the kit's folder. Questions about what is published, tags, GitHub settings and CI runs need a repository on GitHub and are not in the bench. Expectations are what the fixture holds as of 2026-11-21. Not yet run on a model.",
+  "questions": [
+    {
+      "id": "versions-agree",
+      "q": "Is the version in bench/fixture/ankh-cli the same in every manifest? Which files disagree, and with what?",
+      "expect": [
+        "Cargo\\.toml",
+        "1\\.3\\.0",
+        "plugin\\.json",
+        "1\\.2\\.0",
+        "1\\.4\\.0"
+      ]
+    },
+    {
+      "id": "changelog-entry",
+      "q": "Does bench/fixture/ankh-cli have a changelog entry for its current version? What is the newest entry?",
+      "expect": [
+        "no |not |missing",
+        "1\\.4\\.0",
+        "1\\.3\\.0"
+      ]
+    },
+    {
+      "id": "secrets-seed",
+      "q": "Does anything in bench/fixture/ankh-cli look like a secret, such as a database URL with a password? Give the file and line, not the value.",
+      "expect": [
+        "scripts/seed\\.sh",
+        "\\b3\\b",
+        "db url|database"
+      ]
+    },
+    {
+      "id": "versions-shot",
+      "do": "versions",
+      "params": {
+        "path": "bench/fixture/ankh-cli",
+        "published": false
+      },
+      "expect": [
+        "\"primary\": \"1\\.4\\.0\"",
+        "Cargo\\.toml",
+        "\\.claude-plugin/plugin\\.json",
+        "\"agree\": false",
+        "\"hasEntryForPrimary\": false"
+      ]
+    },
+    {
+      "id": "secrets-shot",
+      "do": "secrets",
+      "params": {
+        "path": "bench/fixture/ankh-cli"
+      },
+      "expect": [
+        "scripts/seed\\.sh",
+        "\"line\": 3",
+        "\"db url\""
+      ]
+    }
+  ]
+}

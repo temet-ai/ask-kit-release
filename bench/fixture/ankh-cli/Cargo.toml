@@ -1,0 +1,6 @@
+[package]
+name = "ankh-core"
+version = "1.3.0"
+edition = "2021"
+license = "MIT"
+description = "The core of ankh-cli"

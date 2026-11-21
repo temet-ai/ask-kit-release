@@ -1,0 +1,8 @@
+{
+  "name": "ankh-cli",
+  "version": "1.4.0",
+  "description": "A fixture for the release kit's bench: its manifests disagree on the version and one script holds a database URL with a password.",
+  "license": "MIT",
+  "bin": { "ankh": "src/cli.js" },
+  "files": ["src", "LICENSE"]
+}
