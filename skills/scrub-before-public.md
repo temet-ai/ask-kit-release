@@ -13,7 +13,7 @@ Scrub a repository before it goes public: secrets, personal traces, private word
    private repository: export squashed history to a new public repository. Say that, and that moving
    content out comes before any rewrite.
 6. Fix in the tree (with `act`): replace each value with a placeholder (`user@example.com`, `/home/user`,
-   `<token>`) or Discworld data, and run the scan again. A found secret is rotated by the owner; do not
+   `<token>`) or made-up data, and run the scan again. A found secret is rotated by the owner; do not
    handle the real value.
 7. `.gitleaks.toml` allowlists literal entries only, never a broad pattern, because the file ships in the
    public tree.

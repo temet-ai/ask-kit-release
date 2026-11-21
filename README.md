@@ -32,11 +32,13 @@ ask-kit kit install temet-ai/ask-kit-release --yes  # installs and enables it
 Restart your agents so `ask` lists `release`. The kit answers about the repository your agent works
 in; a question that names another folder is answered there.
 
-Settings, all optional: `PRIVATE_WORDS` is a file of words for the private-word check (one extended
+Settings, all optional. The kit carries its own release files in `templates/` and the script that
+copies them in `bin/scaffold` (Python 3); the two settings below only replace them. `PRIVATE_WORDS` is a file of words for the private-word check (one extended
 regex per line, kept outside every repository; without it that check reports "not run", which
 blocks the audit decision). `TEMPLATES` is a folder of release files (LICENSE, SECURITY.md, CI
-workflows and the like) that missing files are copied from. `SCAFFOLD` is a script that adds every
-missing template at once. `TIMEZONE` is the zone dates are given in (default: the machine's).
+workflows and the like) that missing files are copied from; default `templates/` in the kit. `SCAFFOLD`
+is a script that adds every missing template at once; default `bin/scaffold` in the kit, which reads the
+`templates/` folder beside it, so a different `TEMPLATES` applies to single files only. `TIMEZONE` is the zone dates are given in (default: the machine's).
 
 ## What it carries
 
@@ -57,7 +59,7 @@ built, patterns only for secrets.
 
 ## What it can change
 
-When the request asks for a change it can add a missing file from the templates folder (never
+When the request asks for a change it can add a missing file from the bundled templates (or those named by `TEMPLATES`; never
 overwriting), run the scaffold script, write the version into every manifest, lockfile and plugin
 manifest, write the changelog entry from the commits since the last tag, create an annotated tag
 locally, and replace the notes of an existing GitHub release.

@@ -1,4 +1,4 @@
-Make a repository release-ready: run the audit, then add what is missing from the templates folder (setting `TEMPLATES`)
+Make a repository release-ready: run the audit, then add what is missing from the templates folder (setting `TEMPLATES`, default the kit's own)
 1. `const a = await scripts.run("audit")`. Keep `a.blocking`, `a.otherFailures` and `a.notRun`.
 2. `const dry = await release.scaffold()` (a dry run: it lists every template that is missing and the
    `__PLACEHOLDER__` values it could not fill; it writes nothing). Its list and the audit's failures are the work.
@@ -22,8 +22,9 @@ Make a repository release-ready: run the audit, then add what is missing from th
    - the sandbox variable honoured in code, one `sandboxed()` check before any browser, clipboard,
      notifier, editor, terminal or third-party CLI (Rust projects).
    - README: for a cold reader, no slogans; two cold readers must be able to install and start it.
-   - public AGENTS.md: map, build, rules, the Discworld test-data rule, no private paths.
+   - public AGENTS.md: map, build, rules, made-up test data, no private paths.
 7. Run the audit again with `scripts.run("audit", { history: false })` and report what moved from fail to
    pass. Do not commit unless the request says to.
-8. Defaults you do not ask again: MIT, org `temet-ai`, one SemVer `0.1.0-alpha.N`, tag `v<version>`,
-   PR CI on Linux only and the platform matrix on tags, Homebrew tap and mise, test data from Discworld.
+8. Defaults of the templates: MIT, one SemVer `0.1.0-alpha.N`, tag `v<version>`, PR CI on Linux only
+   and the platform matrix on tags, Homebrew tap and mise. The organisation and holder are not defaulted:
+   take them from the request or the repository's remote, and leave the placeholder otherwise.

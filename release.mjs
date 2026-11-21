@@ -1,7 +1,7 @@
 // A client for a repository's release state: where its version is written, what is unreleased,
 // what is published, what looks like a secret or a private word, and the readiness audit of the
 // release-readiness audit. It reads. When the caller asked for a change (`act`) it can also add
-// a missing file from the templates folder (setting TEMPLATES), set the version, write the changelog entry, create a
+// a missing file from the templates folder (setting TEMPLATES, default the kit's templates folder), set the version, write the changelog entry, create a
 // tag, and, only with `confirm` equal to the version, push the tag, publish or create the release.
 //
 // Checks: a call that changes a file, a tag or a remote needs `act`; pushing a tag, publishing and
@@ -13,7 +13,11 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { runAudit } from "./audit.mjs";
+
+// The kit's own folder: the bundled templates and scaffold script live here when the settings do not name others.
+const KIT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const notInThisAsk = (what) => {
   throw new Error(`not in this ask: ${what} changes things, and the caller did not ask for a change (act: true), so nothing was done. Answer what you can, and say that this needs \`ask\` with act: true. Do not look for another way to do it.`);
@@ -726,7 +730,7 @@ export function makeRelease({ cwd, push = () => {}, act = false, settings = {} }
   const audit = (o) => runAudit(api, internals, o ?? {});
 
   // ---- acting ---------------------------------------------------------------------------------
-  const templatesDir = () => tilde(settings.TEMPLATES) || "";
+  const templatesDir = () => tilde(settings.TEMPLATES) || path.join(KIT_DIR, "templates");
   const fillTemplate = async (text, o = {}) => {
     const p = await project();
     const rp = await repo();
@@ -739,7 +743,7 @@ export function makeRelease({ cwd, push = () => {}, act = false, settings = {} }
     for (const [k, v] of Object.entries(vals)) t = t.split(k).join(v);
     return t;
   };
-  /** The templates in the TEMPLATES folder, as paths relative to it. Empty when the setting is not set. */
+  /** The templates in the TEMPLATES folder (default: the kit's templates folder), as paths relative to it. */
   function templates() {
     const out = [];
     const walk = (d, rel) => {
@@ -759,7 +763,7 @@ export function makeRelease({ cwd, push = () => {}, act = false, settings = {} }
   async function addFile(name, o = {}) {
     needAct(`adding ${name} to the repository`);
     const have = templates();
-    if (!have.includes(name)) refuse(`no template ${name}; the templates folder has: ${have.join(", ") || "nothing (set TEMPLATES to a folder of release files)"}`);
+    if (!have.includes(name)) refuse(`no template ${name}; the templates folder has: ${have.join(", ") || "nothing (the TEMPLATES setting names a folder with no files)"}`);
     const dest = abs(name);
     if (fs.existsSync(dest)) return { file: name, created: false, note: "already exists; merge by hand" };
     if (name === "LICENSE" && !o.holder) refuse("LICENSE needs the copyright holder: pass { holder } (confirm it with the owner)");
@@ -773,12 +777,12 @@ export function makeRelease({ cwd, push = () => {}, act = false, settings = {} }
     const placeholders = [...new Set(text.match(/__[A-Z_]+__/g) ?? [])];
     return { file: name, created: true, placeholdersLeft: placeholders };
   }
-  /** The scaffold script (setting SCAFFOLD), which adds every missing template and never overwrites. dryRun (default true) only lists. */
+  /** The scaffold script (setting SCAFFOLD, default: bin/scaffold in the kit), which adds every missing template and never overwrites. dryRun (default true) only lists. */
   async function scaffold(o = {}) {
     const dry = o.dryRun !== false;
     if (!dry) needAct("scaffolding the missing release files");
-    const script = tilde(settings.SCAFFOLD);
-    if (!script) refuse("no scaffold script: set SCAFFOLD to a script that takes the repository folder, --name and --dry-run (use addFile for single templates)");
+    const script = tilde(settings.SCAFFOLD) || path.join(KIT_DIR, "bin", "scaffold");
+    if (!fs.existsSync(script)) refuse(`no scaffold script at ${script}: set SCAFFOLD to a script that takes the repository folder, --name and --dry-run (use addFile for single templates)`);
     const p = await project();
     const name = o.name ?? (p.npm?.name ?? p.cargo?.crates?.[0]?.name ?? path.basename(root)).replace(/^@[^/]+\//, "");
     const args = [script, root, "--name", name];

@@ -257,7 +257,7 @@ export async function runAudit(api, I, o = {}) {
     return n ? fail([`${n} hits: ${Object.entries(sec.tree.byKind).filter(([k]) => kinds.includes(k)).map(([k, c]) => `${c} ${k}`).join(", ")}`, ...hits.slice(0, 12).map((h) => at(h.file, h.line, h.kind))]) : pass(["none"]);
   });
   const pw = await I.privateWords({ history: !!history, commits });
-  chk("private-words", "Privacy", "P0", "No private word in the tree or the commit messages", "One list outside every repo; a derived leak (a colleague's name in a test, a real repository name or ticket key in a fixture or plan, a commit message) is what a secret scan misses", "Replace each with Discworld test data; reword the commit before the repo goes public", "The word list matches nothing in the tracked files, file names and commit messages", async () => {
+  chk("private-words", "Privacy", "P0", "No private word in the tree or the commit messages", "One list outside every repo; a derived leak (a colleague's name in a test, a real repository name or ticket key in a fixture or plan, a commit message) is what a secret scan misses", "Replace each with made-up test data; reword the commit before the repo goes public", "The word list matches nothing in the tracked files, file names and commit messages", async () => {
     if (!pw.ran) return { status: "unknown", evidence: [`NOT RUN: ${pw.reason}`, "a required NOT RUN blocks the audit"] };
     const n = pw.tree.lines + pw.pathHits + pw.commitMessages.count + (pw.history?.commitsTouching ?? 0);
     const ev = [`list: ${pw.words} words`];

@@ -1,5 +1,5 @@
 The public/private split: what stays private, and how the public repository is filled
-1. Read the rule: the source goes to a new public repository under `temet-ai`, filled by
+1. Read the rule: the source goes to a new public repository under the owner's organisation, filled by
    `scripts/export-public` as squashed commits. The private repository keeps the full history, plans,
    `.claude/` and handoffs. Never flip the private repository public: GitHub keeps `refs/pull/*`, so
    commits from a cleaned history stay fetchable in the old one.
@@ -18,5 +18,5 @@ The public/private split: what stays private, and how the public repository is f
    and a local bare repo. A planted private word must be refused with nothing pushed; a clean tree is one
    commit; an unchanged second export pushes nothing. Name these as the steps for the caller; running
    the export with `--push` creates the public repository's content and is done only when the owner says to.
-7. Test data in a public tree uses Discworld names (`Sam Vimes`, `ankh-morpork/watch`, `WATCH-12`) and
+7. Test data in a public tree uses made-up names and
    the hosts `example.com` or `.invalid`.

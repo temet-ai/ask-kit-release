@@ -9,7 +9,7 @@ declare const release: {
   // Returns {code, out, err}. Anything that changes a ref, a file or a remote throws; use the typed calls below.
   git(...args: string[]): Promise<{ code: number; out: string; err: string }>;
   // Read-only gh: `repo view`, `release list|view`, `run list|view`, `workflow list|view` and `api <path>` (GET only), e.g.
-  // release.gh("release", "list", "-R", "temet-ai/ask-kit", "--json", "tagName,publishedAt"). Returns {code, out, err}.
+  // release.gh("release", "list", "-R", "owner/repo", "--json", "tagName,publishedAt"). Returns {code, out, err}.
   gh(...args: string[]): Promise<{ code: number; out: string; err: string }>;
   // `npm view <name> <field> --json` in a neutral folder: {status: "published", value} | {status: "not published"} | {status: "unreadable", error}.
   npmView(name: string, field?: string): Promise<{ status: string; value?: any; error?: string }>;
@@ -50,11 +50,11 @@ declare const release: {
 
   // ---- changing calls: each throws "not in this ask" unless the caller asked for a change (act: true) ----
 
-  // The templates (paths relative to the TEMPLATES folder; empty when it is not set).
+  // The templates (paths relative to the TEMPLATES folder; by default the templates folder bundled in the kit).
   templates(): string[];
   // Copy one template into the repository with its names filled in; never overwrites. LICENSE needs { holder }.
   addFile(name: string, o?: { name?: string; org?: string; desc?: string; holder?: string; author?: string; privateRepo?: string }): Promise<{ file: string; created: boolean; placeholdersLeft?: string[]; note?: string }>;
-  // The scaffold script (setting SCAFFOLD; refuses when it is not set): adds every missing template, never overwrites. dryRun defaults to TRUE and then only lists what it would add (allowed in every ask).
+  // The scaffold script (setting SCAFFOLD; by default the bundled bin/scaffold): adds every missing template, never overwrites. dryRun defaults to TRUE and then only lists what it would add (allowed in every ask).
   scaffold(o?: { dryRun?: boolean; name?: string; desc?: string; author?: string; holder?: string; privateRepo?: string; org?: string }): Promise<{ dryRun: boolean; code: number; out: string }>;
   // Write the version into every place versions() found. Files are written, not committed.
   setVersion(version: string): Promise<{ changed: { file: string; line: number; from: string; to: string }[]; agree: boolean }>;

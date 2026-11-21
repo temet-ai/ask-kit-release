@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Copy the release-ready templates into a repository, filling in its names.
+
+usage: scaffold REPO --name NAME [--org OWNER] [--desc TEXT] [--holder TEXT]
+                [--author "<author> <id+login@users.noreply.github.com>"]
+                [--private-repo owner/repo] [--rust | --no-rust] [--node] [--dry-run]
+
+Never overwrites: a file that already exists is skipped and listed, so it can be
+merged by hand. Rust files (deny.toml, about.*, .cargo/config.toml,
+scripts/notices) are copied when REPO has a Cargo.toml or --rust is given;
+scripts/notices-npm.mjs only with --node. Placeholders left for a person to
+fill are printed at the end.
+"""
+
+import argparse
+import datetime
+import os
+import re
+import shutil
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent.parent / "templates"
+RUST_ONLY = {"deny.toml", "about.toml", "about.hbs", ".cargo/config.toml", "scripts/notices"}
+NODE_ONLY = {"scripts/notices-npm.mjs"}
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("repo", type=Path)
+    p.add_argument("--name", required=True, help="product and binary name, lower case")
+    p.add_argument("--org", default="", help="GitHub owner of the repository")
+    p.add_argument("--desc", default="")
+    p.add_argument("--holder", default="", help="copyright holder in LICENSE")
+    p.add_argument("--author", default="", help="author of public commits (a noreply address)")
+    p.add_argument("--private-repo", default="", help="owner/repo of the private repository")
+    rust = p.add_mutually_exclusive_group()
+    rust.add_argument("--rust", dest="rust", action="store_true", default=None)
+    rust.add_argument("--no-rust", dest="rust", action="store_false")
+    p.add_argument("--node", action="store_true")
+    p.add_argument("--dry-run", action="store_true")
+    a = p.parse_args()
+
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", a.name):
+        p.error("--name must be lower case letters, digits and dashes")
+    if not a.repo.is_dir():
+        p.error(f"{a.repo} is not a folder")
+    with_rust = a.rust if a.rust is not None else (a.repo / "Cargo.toml").exists()
+
+    values = {
+        "__NAME__": a.name,
+        "__ORG__": a.org or "__ORG__",
+        "__DESC__": a.desc or "__DESC__",
+        "__HOLDER__": a.holder or "__HOLDER__",
+        "__YEAR__": str(datetime.date.today().year),
+        "__AUTHOR__": a.author or "__AUTHOR__",
+        # POSIX ERE quoting (re.escape writes \- which BSD grep need not accept).
+        "__PRIVATE_REPO__": re.sub(r"([.\[\]()*+?{}|^$\\])", r"\\\1", a.private_repo) if a.private_repo else "__PRIVATE_REPO__",
+        "__SANDBOX__": a.name.upper().replace("-", "_") + "_SANDBOX",
+    }
+
+    written, skipped, unfilled = [], [], set()
+    for src in sorted(HERE.rglob("*")):
+        if src.is_dir():
+            continue
+        rel = src.relative_to(HERE).as_posix()
+        if rel in RUST_ONLY and not with_rust:
+            continue
+        if rel in NODE_ONLY and not a.node:
+            continue
+        dest = a.repo / rel
+        if dest.exists():
+            skipped.append(rel)
+            continue
+        text = src.read_text(encoding="utf-8")
+        for k, v in values.items():
+            text = text.replace(k, v)
+        unfilled.update(f"{rel}: {m}" for m in sorted(set(re.findall(r"__[A-Z_]+__", text))))
+        written.append(rel)
+        if a.dry_run:
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(text, encoding="utf-8")
+        shutil.copymode(src, dest)
+
+    verb = "would write" if a.dry_run else "wrote"
+    for rel in written:
+        print(f"{verb}  {rel}")
+    for rel in skipped:
+        print(f"skipped {rel} (exists: merge by hand from {HERE / rel})")
+    for u in sorted(unfilled):
+        print(f"fill   {u}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

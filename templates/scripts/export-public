@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# scripts/export-public OUT_DIR [--push URL]
+#
+# Builds the public tree of this project from HEAD (committed files only) in
+# OUT_DIR, which must not exist. Left out: the private material listed in
+# scripts/export-public.conf (EXCLUDE), this script and its conf, and the
+# `session_id:` front matter of Markdown files. Then it checks the tree and
+# refuses on any hit:
+#   - an excluded path still present;
+#   - gitleaks with .gitleaks.toml;
+#   - the private word list (scripts/hooks/pre-commit; PRIVATE_WORDS);
+#   - the maintainer's home paths, git email, session links, and PERSONAL;
+#   - a public file that points at an excluded path (a dead link);
+#   - `session_id:` front matter left over.
+#
+# With --push URL it then commits the tree to that repository's main and
+# pushes, never forcing: the first export is its one initial commit, each later
+# export one more commit on top ("<name> <version>"). The author is
+# EXPORT_AUTHOR, else AUTHOR from the conf.
+set -euo pipefail
+
+usage() { echo "usage: $0 OUT_DIR [--push URL]" >&2; exit 2; }
+[ $# -ge 1 ] || usage
+out=$1
+shift
+push=""
+case "${1:-}" in
+    --push) [ $# -eq 2 ] || usage; push=$2 ;;
+    "") ;;
+    *) usage ;;
+esac
+
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+cd "$root"
+conf=scripts/export-public.conf
+[ -f "$conf" ] || { echo "export-public: no $conf" >&2; exit 1; }
+NAME="" AUTHOR="" PERSONAL="" EXCLUDE=()
+# shellcheck source=/dev/null
+. "$conf"
+[ -n "$NAME" ] || { echo "export-public: $conf sets no NAME" >&2; exit 1; }
+EXCLUDE+=(scripts/export-public scripts/export-public.conf)
+
+if [ -e "$out" ]; then
+    echo "export-public: $out exists; give a new folder" >&2
+    exit 1
+fi
+command -v gitleaks >/dev/null || { echo "export-public: gitleaks is not installed" >&2; exit 1; }
+if ! git diff --quiet HEAD; then
+    echo "export-public: note, uncommitted changes are not exported (HEAD is)" >&2
+fi
+
+mkdir -p "$out"
+out=$(cd "$out" && pwd)
+git archive HEAD | tar -x -C "$out"
+(
+    cd "$out"
+    for p in "${EXCLUDE[@]}"; do
+        # shellcheck disable=SC2086
+        rm -rf $p
+    done
+)
+
+# `session_id:` front matter (a list of the sessions that wrote a document).
+python3 -I - "$out" <<'PY'
+import pathlib, re, sys
+for f in pathlib.Path(sys.argv[1]).rglob("*.md"):
+    t = f.read_text(encoding="utf-8")
+    m = re.match(r"---\n(.*?\n)---\n", t, re.S)
+    if not m or "session_id:" not in m.group(1):
+        continue
+    kept, skip = [], False
+    for line in m.group(1).splitlines(keepends=True):
+        if line.startswith("session_id:"):
+            skip = True
+            continue
+        if skip and re.match(r"\s+- ", line):
+            continue
+        skip = False
+        kept.append(line)
+    if kept:
+        f.write_text("---\n" + "".join(kept) + "---\n" + t[m.end():], encoding="utf-8")
+    else:
+        f.write_text(t[m.end():].lstrip("\n"), encoding="utf-8")
+PY
+
+fail=0
+refuse() { echo "export-public: REFUSED: $*" >&2; fail=1; }
+
+for p in "${EXCLUDE[@]}"; do
+    # shellcheck disable=SC2086
+    if compgen -G "$out/$p" >/dev/null; then refuse "$p is still in the tree"; fi
+done
+
+if ! gitleaks dir "$out" --config "$root/.gitleaks.toml" --no-banner --redact >"$out.gitleaks.log" 2>&1; then
+    refuse "gitleaks found a secret (see $out.gitleaks.log)"
+fi
+
+list=${PRIVATE_WORDS:-$HOME/.config/dev/private-words.txt}
+if [ ! -s "$list" ]; then
+    refuse "no private word list at $list"
+else
+    patterns=$(mktemp)
+    grep -v -E '^[[:space:]]*(#|$)' "$list" > "$patterns" || true
+    if [ ! -s "$patterns" ]; then
+        refuse "$list has no words in it"
+    elif hits=$( (cd "$out" && find . -type f | grep -i -E -f "$patterns"; grep -r -n -I -i -E -f "$patterns" "$out") | head -20); [ -n "$hits" ]; then
+        refuse "private words in the tree:"$'\n'"$hits"
+    fi
+    rm -f "$patterns"
+fi
+
+# The maintainer's own traces: home folders, git email, session links, and the
+# conf's PERSONAL (private repo names, other paths). Regex-quote the literals.
+quote() { printf '%s' "$1" | sed 's/[][\.*^$+?(){}|]/\\&/g'; }
+personal="$(quote "$HOME")|/home/$(quote "${USER:-x}")/|/Users/$(quote "${USER:-x}")/|claude\.ai/code/session_"
+email=$(git config user.email 2>/dev/null || true)
+[ -z "$email" ] || case "$email" in *noreply*) ;; *) personal="$personal|$(quote "$email")" ;; esac
+[ -z "$PERSONAL" ] || personal="$personal|$PERSONAL"
+if hits=$(grep -r -n -I -E "$personal" "$out" | head -20); [ -n "$hits" ]; then
+    refuse "private paths, links or names in the tree:"$'\n'"$hits"
+fi
+
+# A public file pointing at what the export leaves out is a dead link.
+dead=""
+for p in "${EXCLUDE[@]}"; do
+    case "$p" in scripts/export-public*) continue ;; esac
+    re=$(quote "$p" | sed 's|\\\*|[^/]*|g')
+    dead="${dead:+$dead|}$re"
+done
+if [ -n "$dead" ] && hits=$(grep -r -n -I -E --exclude=.gitignore "($dead)" "$out" | head -20); [ -n "$hits" ]; then
+    refuse "public files point at material the export leaves out:"$'\n'"$hits"
+fi
+if hits=$(grep -r -n -E --include='*.md' '^session_id:' "$out" | head -20); [ -n "$hits" ]; then
+    refuse "session_id front matter left:"$'\n'"$hits"
+fi
+
+if [ "$fail" -ne 0 ]; then
+    echo "export-public: nothing pushed; the tree is in $out for a look" >&2
+    exit 1
+fi
+rm -f "$out.gitleaks.log"
+echo "export-public: $out is clean ($(cd "$out" && find . -type f | wc -l | tr -d ' ') files)"
+
+[ -n "$push" ] || exit 0
+
+# The version: the root Cargo package, else package.json, else the last tag.
+if [ -f Cargo.toml ] && command -v cargo >/dev/null; then
+    version=$(cargo metadata --no-deps --format-version 1 --manifest-path "$root/Cargo.toml" |
+        python3 -I -c 'import json,sys; n=sys.argv[1]; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == n))' "$NAME")
+elif [ -f package.json ]; then
+    version=$(python3 -I -c 'import json; print(json.load(open("package.json"))["version"])')
+else
+    version=$(git describe --tags --abbrev=0 2>/dev/null || echo unversioned)
+fi
+author=${EXPORT_AUTHOR:-$AUTHOR}
+[ -n "$author" ] || { echo "export-public: set AUTHOR in $conf or EXPORT_AUTHOR" >&2; exit 1; }
+repo=$(mktemp -d)
+trap 'rm -rf "$repo"' EXIT
+if git clone -q "$push" "$repo/r" 2>/dev/null && git -C "$repo/r" rev-parse -q --verify HEAD >/dev/null; then
+    message="$NAME $version"
+else
+    rm -rf "$repo/r"
+    git init -q "$repo/r"
+    git -C "$repo/r" symbolic-ref HEAD refs/heads/main
+    git -C "$repo/r" remote add origin "$push"
+    message="$NAME $version: the first public source"
+fi
+# The export replaces the whole tree.
+find "$repo/r" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+(cd "$out" && tar -cf - .) | (cd "$repo/r" && tar -xf -)
+cd "$repo/r"
+git add -A
+if git diff --cached --quiet; then
+    echo "export-public: the public tree has not changed; nothing pushed"
+    exit 0
+fi
+name=${author% <*}
+email=${author##*<}
+email=${email%>}
+git -c user.name="$name" -c user.email="$email" -c core.hooksPath=/dev/null commit -q -m "$message"
+git push -q origin HEAD:main
+echo "export-public: pushed $(git rev-parse --short HEAD) to $push main"

@@ -13,8 +13,8 @@ create the tag, and (with the version confirmed) push the tag, publish or create
 
 - `git` and `node` on PATH. `gh` for the Remote checks; without it they are reported as not run.
 - `npm` for `npm view` and `npm pack --dry-run`, and `cargo` for `cargo search`, when the repository has those manifests.
-- A templates folder (setting `TEMPLATES`) and optionally a scaffold script (setting `SCAFFOLD`, needs
-  `python3`), only for the changing calls and the scaffold dry run.
+- `python3` for the scaffold script, only for the scaffold calls. The kit bundles `templates/` and
+  `bin/scaffold`; settings `TEMPLATES` and `SCAFFOLD` replace them.
 - A private-word list at `PRIVATE_WORDS`, only for that check.
 
 ## What it reads and runs
@@ -33,7 +33,9 @@ create the tag, and (with the version confirmed) push the tag, publish or create
 `ask-kit.toml` with a `module` source `release` (`release.mjs`, `api.d.ts`) and a `folder` source `repo`
 on `${REPO_ROOT}` (detected by `git rev-parse --show-toplevel`; credentials, lockfiles and build output
 excluded). `acts` lists the changing functions as `release.<function>` and `repo.edit|write|run`.
-Settings `PRIVATE_WORDS` and `TEMPLATES`.
+Settings `PRIVATE_WORDS`, `TEMPLATES` and `SCAFFOLD`, the last two defaulting to `${KIT_DIR}/templates` and
+`${KIT_DIR}/bin/scaffold`; `templates/` holds the release files and `bin/scaffold` is a Python script that
+copies them into a repository, filling the `__NAME__`-style markers.
 
 `release.mjs` exports `make({settings, push, cwd, act})` and returns the `release` global:
 `repo()`, `project()`, `versions()` (places by file and line for package.json, package-lock.json,
