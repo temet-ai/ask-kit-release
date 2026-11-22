@@ -5,11 +5,7 @@ const SAFE_SEV = { P0: 0, P1: 1, P2: 2 };
 export async function runAudit(api, I, o = {}) {
   const { history = true, commits = 300, remote = true } = o;
   const { files, read, tryRead, lineOf, json } = I;
-  const fl = await files();
-  const p = await I.project();
-  const rp = await I.repo();
-  const ver = await api.versions({ published: remote });
-  const tg = await I.tags();
+  const [fl, p, rp, ver, tg] = await Promise.all([files(), I.project(), I.repo(), api.versions({ published: remote }), I.tags()]);
   const has = (re) => fl.filter((f) => (re instanceof RegExp ? re.test(f) : f === re));
   const first = (re) => has(re)[0] ?? null;
   const at = (f, line, note) => `${f}${line ? ":" + line : ""}${note ? " " + note : ""}`;
@@ -237,7 +233,7 @@ export async function runAudit(api, I, o = {}) {
     const bad = fl.filter((f) => I.SECRET_FILE.test(f));
     return bad.length ? fail(bad.slice(0, 10).map((f) => at(f, null, "named like a credential file (not read)"))) : pass(["no tracked .env, .npmrc, key, pem or credentials file"]);
   });
-  const sec = await I.secrets({ history, commits });
+  const [sec, pw] = await Promise.all([I.secrets({ history, commits }), I.privateWords({ history: !!history, commits })]);
   const tokenKinds = new Set(["github token", "gitlab token", "slack token", "api key", "aws key", "google key", "npm token", "private key", "jwt", "bearer", "token field", "npmrc token", "db url"]);
   chk("secrets-tree", "Privacy", "P0", "No secret-shaped value in the tracked files", "Secret scan; counts and file names only, never a value", "Replace each with a placeholder (user@example.com, <token>), rotate the real value, scan again", "The scan finds none", async () => {
     const hits = sec.tree.hits.filter((h) => tokenKinds.has(h.kind));
@@ -256,7 +252,6 @@ export async function runAudit(api, I, o = {}) {
     const n = Object.entries(sec.tree.byKind).filter(([k]) => kinds.includes(k)).reduce((a, [, c]) => a + c, 0);
     return n ? fail([`${n} hits: ${Object.entries(sec.tree.byKind).filter(([k]) => kinds.includes(k)).map(([k, c]) => `${c} ${k}`).join(", ")}`, ...hits.slice(0, 12).map((h) => at(h.file, h.line, h.kind))]) : pass(["none"]);
   });
-  const pw = await I.privateWords({ history: !!history, commits });
   chk("private-words", "Privacy", "P0", "No private word in the tree or the commit messages", "One list outside every repo; a derived leak (a colleague's name in a test, a real repository name or ticket key in a fixture or plan, a commit message) is what a secret scan misses", "Replace each with made-up test data; reword the commit before the repo goes public", "The word list matches nothing in the tracked files, file names and commit messages", async () => {
     if (!pw.ran) return { status: "unknown", evidence: [`NOT RUN: ${pw.reason}`, "a required NOT RUN blocks the audit"] };
     const n = pw.tree.lines + pw.pathHits + pw.commitMessages.count + (pw.history?.commitsTouching ?? 0);
